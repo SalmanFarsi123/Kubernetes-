@@ -2,54 +2,105 @@ apiVersion: v1
 kind: Namespace
 metadata:
   labels:
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-  name: "apache"
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+  name: ingress-apache
 ---
 apiVersion: v1
-automountServiceAccountToken: true
 kind: ServiceAccount
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache
+  namespace: ingress-apache
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-admission
+  namespace: ingress-apache
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache
+  namespace: ingress-apache
 rules:
 - apiGroups:
   - ""
   resources:
+  - namespaces
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
   - configmaps
+  - pods
   - secrets
   - endpoints
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
   - services
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - ""
+  - networking.k8s.io
   resources:
-  - pods
+  - ingresses
   verbs:
   - get
   - list
   - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - coordination.k8s.io
+  resourceNames:
+  - ingress-apache-leader
+  resources:
+  - leases
+  verbs:
+  - get
+  - update
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
 - apiGroups:
   - ""
   resources:
@@ -57,16 +108,42 @@ rules:
   verbs:
   - create
   - patch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-admission
+  namespace: ingress-apache
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - create
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   labels:
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache"
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache
 rules:
 - apiGroups:
   - ""
@@ -81,9 +158,30 @@ rules:
   - list
   - watch
 - apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+- apiGroups:
   - ""
   resources:
   - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
   verbs:
   - get
   - list
@@ -95,150 +193,279 @@ rules:
   verbs:
   - create
   - patch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - update
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingressclasses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - list
+  - watch
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-admission
+rules:
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - update
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache
+  namespace: ingress-apache
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: "apache"
+  name: ingress-apache
 subjects:
 - kind: ServiceAccount
-  name: "apache"
-  namespace: "apache"
+  name: ingress-apache
+  namespace: ingress-apache
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-admission
+  namespace: ingress-apache
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ingress-apache-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-apache-admission
+  namespace: ingress-apache
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   labels:
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache"
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: "apache"
+  name: ingress-apache
 subjects:
 - kind: ServiceAccount
-  name: "apache"
-  namespace: "apache"
+  name: ingress-apache
+  namespace: ingress-apache
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: admission-webhook
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-admission
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ingress-apache-admission
+subjects:
+- kind: ServiceAccount
+  name: ingress-apache-admission
+  namespace: ingress-apache
 ---
 apiVersion: v1
 data:
-  server-config: |
-    ServerRoot "/usr/local/apache2"
-    Listen 80
-    LoadModule mpm_event_module modules/mod_mpm_event.so
-    LoadModule authn_core_module modules/mod_authn_core.so
-    LoadModule authz_core_module modules/mod_authz_core.so
-    LoadModule http_module modules/mod_http.so
-    LoadModule mime_module modules/mod_mime.so
-    LoadModule log_config_module modules/mod_log_config.so
-    LoadModule env_module modules/mod_env.so
-    LoadModule headers_module modules/mod_headers.so
-    LoadModule dir_module modules/mod_dir.so
-    LoadModule alias_module modules/mod_alias.so
-    <Directory />
-        AllowOverride none
-        Require all denied
-    </Directory>
-    DocumentRoot "/usr/local/apache2/htdocs"
-    <Directory "/usr/local/apache2/htdocs">
-        Options Indexes FollowSymLinks
-        AllowOverride None
-        Require all granted
-    </Directory>
-    ErrorLog "/proc/self/fd/2"
-    LogLevel warn
-    CustomLog "/proc/self/fd/1" combined
+  allow-snippet-annotations: "true"
 kind: ConfigMap
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache-config"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-controller
+  namespace: ingress-apache
 ---
 apiVersion: v1
 kind: Service
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache-service"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-controller
+  namespace: ingress-apache
 spec:
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
   ports:
-  - port: 80
+  - appProtocol: http
+    name: http
+    port: 80
     protocol: TCP
-    targetPort: 80
+    targetPort: http
+  - appProtocol: https
+    name: https
+    port: 443
+    protocol: TCP
+    targetPort: https
   selector:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-  type: NodePort
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+  sessionAffinity: None
+  type: LoadBalancer
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/component: "server"
-    app.kubernetes.io/instance: "apache"
-    app.kubernetes.io/name: "apache"
-    app.kubernetes.io/part-of: "apache"
-    app.kubernetes.io/version: "2.4"
-  name: "apache-deployment"
-  namespace: "apache"
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/instance: ingress-apache
+    app.kubernetes.io/name: ingress-apache
+    app.kubernetes.io/part-of: ingress-apache
+  name: ingress-apache-controller
+  namespace: ingress-apache
 spec:
+  minReadySeconds: 0
+  revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app.kubernetes.io/component: "server"
-      app.kubernetes.io/instance: "apache"
-      app.kubernetes.io/name: "apache"
+      app.kubernetes.io/component: controller
+      app.kubernetes.io/instance: ingress-apache
+      app.kubernetes.io/name: ingress-apache
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
   template:
     metadata:
       labels:
-        app.kubernetes.io/component: "server"
-        app.kubernetes.io/instance: "apache"
-        app.kubernetes.io/name: "apache"
-        app.kubernetes.io/part-of: "apache"
-        app.kubernetes.io/version: "2.4"
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/instance: ingress-apache
+        app.kubernetes.io/name: ingress-apache
+      name: ingress-apache-controller
     spec:
       containers:
-      - image: httpd:2.4
-        name: "apache"
+      - args:
+        - /nginx-ingress-controller
+        - --publish-service=$(POD_NAMESPACE)/ingress-apache-controller
+        - --election-id=ingress-apache-leader
+        - --controller-class=k8s.io/ingress-nginx
+        - --configmap=$(POD_NAMESPACE)/ingress-apache-controller
+        - --validating-webhook=:8443
+        - --validating-webhook-certificate=/usr/local/certificates/cert
+        - --validating-webhook-key=/usr/local/certificates/key
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        image: nginx-ingress-controller:0.49.3
+        imagePullPolicy: IfNotPresent
+        lifecycle: {}
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        name: controller
         ports:
         - containerPort: 80
-        volumeMounts:
-        - mountPath: /usr/local/apache2/conf/httpd.conf
-          name: apache-config
-          subPath: server-config
+          name: http
+          protocol: TCP
+        - containerPort: 443
+          name: https
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 10254
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
         resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
           requests:
             cpu: 100m
-            memory: 256Mi
-      volumes:
-      - configMap:
-          name: apache-config
-        name: apache-config
-      nodeSelector:
-        kubernetes.io/os: "linux"
-      serviceAccountName: "apache"
+            memory: 90Mi
+        securityContext:
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+            - NET_BIND_SERVICE
+            drop:
+            - ALL
+          runAsUser: 101
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /usr/local/certificates/
+          name: webhook-cert
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext:
+        runAsNonRoot: true
+      serviceAccount: ingress-apache
+      serviceAccountName: ingress-apache
       terminationGracePeriodSeconds: 30
+      volumes:
+      - name: webhook-cert
+        secret:
+          secretName: ingress-apache-admission
+
